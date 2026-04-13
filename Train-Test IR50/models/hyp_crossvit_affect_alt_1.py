@@ -1,0 +1,453 @@
+import torch
+from torch import nn, einsum
+import torch.nn.functional as F
+from einops import rearrange, repeat
+from einops.layers.torch import Rearrange
+
+import numpy as np
+from functools import partial
+from typing import List, Tuple, Optional, Union
+from timm.models.layers import DropPath, trunc_normal_
+
+
+
+class Mlp(nn.Module):
+    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
+    """
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer()
+        self.drop1 = nn.Dropout(drop)
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop2 = nn.Dropout(drop)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop1(x)
+        x = self.fc2(x)
+        x = self.drop2(x)
+        return x
+
+
+def drop_path(x, drop_prob: float = 0., training: bool = False):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
+    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
+    'survival rate' as the argument.
+    """
+    if drop_prob == 0. or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    random_tensor.floor_()  # binarize
+    output = x.div(keep_prob) * random_tensor
+    return output
+
+
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+    """
+    def __init__(self, drop_prob=None):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training)
+class MHSA(nn.Module):
+    """Multi-headed Self Attention module.
+
+    Source modified from:
+    https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        head_dim: int = 32,
+        qkv_bias: bool = False,
+        attn_drop: float = 0.0,
+        proj_drop: float = 0.0,
+    ) -> None:
+        """Build MHSA module that can handle 3D or 1D input tensors.
+
+        Args:
+            dim: Number of embedding dimensions.
+            head_dim: Number of hidden dimensions per head. Default: ``32``
+            qkv_bias: Use bias or not. Default: ``False``
+            attn_drop: Dropout rate for attention tensor.
+            proj_drop: Dropout rate for projection tensor.
+        """
+        super().__init__()
+        assert dim % head_dim == 0, "dim should be divisible by head_dim"
+        self.head_dim = head_dim
+        self.num_heads = dim // head_dim
+        self.scale = head_dim**-0.5
+
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+          # B, L, C -> B, C, L
+        shape = x.shape
+        B, C, L = shape  # Assume shape is (B, C, L) for 1D input
+        x = x.transpose(1, 2)
+        if len(shape) == 4:
+            raise ValueError("Input should be 1D (B, C, L), not 4D.")
+        
+        qkv = (
+            self.qkv(x)
+            .reshape(B, L,3, self.num_heads, self.head_dim)
+            .permute(2, 0, 3, 1, 4)
+        )
+        q, k,v = qkv.unbind(0)  # make torchscript happy (cannot use tensor as tuple)
+
+        # trick here to make q@k.t more stable
+        attn = (q * self.scale) @ k.transpose(-2, -1)
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, L, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+
+        return x
+    
+    
+class ConvFFN(nn.Module):
+    """Convolutional FFN Module."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        hidden_channels: Optional[int] = None,
+        out_channels: Optional[int] = None,
+        act_layer: nn.Module = nn.GELU,
+        drop: float = 0.0,
+    ) -> None:
+        """Build convolutional FFN module.
+
+        Args:
+            in_channels: Number of input channels.
+            hidden_channels: Number of channels after expansion. Default: None
+            out_channels: Number of output channels. Default: None
+            act_layer: Activation layer. Default: ``GELU``
+            drop: Dropout rate. Default: ``0.0``.
+        """
+        super().__init__()
+        out_channels = out_channels or in_channels
+        hidden_channels = hidden_channels or in_channels
+        self.conv = nn.Sequential()
+        self.conv.add_module(
+            "conv",
+            nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=7,
+                padding=3,
+                groups=in_channels,
+                bias=False,
+            ),
+        )
+        self.conv.add_module("bn", nn.BatchNorm2d(num_features=out_channels))
+        self.fc1 = nn.Conv2d(in_channels, hidden_channels, kernel_size=1)
+        self.act = act_layer()
+        self.fc2 = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
+        self.drop = nn.Dropout(drop)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m: nn.Module) -> None:
+        if isinstance(m, nn.Conv2d):
+            trunc_normal_(m.weight, std=0.02)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = x.permute(1,0,2)
+        x = self.conv(x)
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+        return x
+
+
+class Attention_img(nn.Module):
+    def __init__(self, dim, in_chans, q_chanel, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+        super().__init__()
+        self.num_heads = num_heads
+        self.img_chanel = in_chans + 1
+        head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
+
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x,):
+        x_img = x[:, :self.img_chanel, :]
+        x_lm = x[:, self.img_chanel:, :]
+
+        B, N, C = x_img.shape
+        kv = self.kv(x_img).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        k, v = kv.unbind(0) # make torchscript happy (cannot use tensor as tuple)
+        q = x_lm.reshape(B, -1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x_img = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x_img = self.proj(x_img)
+        x_img = self.proj_drop(x_img)
+
+        return x_img
+
+class Attention_lm(nn.Module):
+    def __init__(self, dim, in_chans, q_chanel, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+        super().__init__()
+        self.num_heads = num_heads
+        self.img_chanel = in_chans + 1
+        head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
+
+        self.kv = nn.Linear(dim, dim * 2, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+        
+class FastAttentionBlock(nn.Module):
+    """Implementation of metaformer block with MHSA as token mixer.
+
+    For more details on Metaformer structure, please refer to:
+    `MetaFormer Is Actually What You Need for Vision <https://arxiv.org/pdf/2111.11418.pdf>`_
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        mlp_ratio: float = 4.0,
+        act_layer: nn.Module = nn.GELU,
+        norm_layer: nn.Module = nn.BatchNorm1d,
+        drop: float = 0.0,
+        drop_path: float = 0.0,
+        use_layer_scale: bool = True,
+        layer_scale_init_value: float = 1e-5,
+    ):
+        """Build Attention Block.
+
+        Args:
+            dim: Number of embedding dimensions.
+            mlp_ratio: MLP expansion ratio. Default: 4.0
+            act_layer: Activation layer. Default: ``nn.GELU``
+            norm_layer: Normalization layer. Default: ``nn.BatchNorm2d``
+            drop: Dropout rate. Default: 0.0
+            drop_path: Drop path rate. Default: 0.0
+            use_layer_scale: Flag to turn on layer scale. Default: ``True``
+            layer_scale_init_value: Layer scale value at initialization. Default: 1e-5
+        """
+
+        super().__init__()
+
+        #self.norm = norm_layer(dim)
+        self.norm = norm_layer(dim*2)
+        self.token_mixer = MHSA(dim=dim*2)
+
+        assert mlp_ratio > 0, "MLP ratio should be greater than 0, found: {}".format(
+            mlp_ratio
+        )
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.convffn = ConvFFN(
+            in_channels=dim,
+            hidden_channels=mlp_hidden_dim,
+            act_layer=act_layer,
+            drop=drop,
+        )
+
+        # Drop path
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+
+        # Layer Scale
+        self.use_layer_scale = use_layer_scale
+        if use_layer_scale:
+            self.layer_scale_1 = nn.Parameter(
+                layer_scale_init_value * torch.ones((dim*2, 1, 1)), requires_grad=True
+            )
+            self.layer_scale_2 = nn.Parameter(
+                layer_scale_init_value * torch.ones((dim*2, 1, 1)), requires_grad=True
+            )
+
+    def forward(self, x):
+        if self.use_layer_scale:
+            #x = x.transpose(3,1)
+            x = x.reshape(x.shape[0], x.shape[1], -1)
+            x = x.permute(1,0,2) + self.drop_path(self.layer_scale_1 * self.token_mixer(self.norm(x)).permute(2,0,1))
+            x = x.permute(1,0,2)
+            #x = x + self.drop_path(self.layer_scale_2 * self.convffn(x))
+        else:
+            x = x + self.drop_path(self.token_mixer(self.norm(x)))
+            x = x + self.drop_path(self.convffn(x))
+        return x
+
+    # def forward(self, x,):
+    #     x_img = x[:, :self.img_chanel, :]
+    #     x_lm = x[:, self.img_chanel:, :]
+
+    #     B, N, C = x_lm.shape
+    #     kv = self.kv(x_lm).reshape(B, N, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+    #     k, v = kv.unbind(0) # make torchscript happy (cannot use tensor as tuple)
+    #     q = x_img.reshape(B, -1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+    #     attn = (q @ k.transpose(-2, -1)) * self.scale
+    #     attn = attn.softmax(dim=-1)
+    #     attn = self.attn_drop(attn)
+
+    #     x_lm = (attn @ v).transpose(1, 2).reshape(B, N, C)
+    #     x_lm = self.proj(x_lm)
+    #     x_lm = self.proj_drop(x_lm)
+
+    #     return x_lm
+
+class Block(nn.Module):
+
+    def __init__(self, dim, in_chans, mlp_ratio=4.0,drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.img_chanel = in_chans + 1
+        self.attn_img = FastAttentionBlock(dim ,mlp_ratio =mlp_ratio ,drop = 0.0, drop_path = 0.0,use_layer_scale=True,layer_scale_init_value=1e-5)
+        self.attn_lm = FastAttentionBlock(dim ,mlp_ratio =mlp_ratio  ,drop = 0.0, drop_path = 0.0,use_layer_scale=True,layer_scale_init_value=1e-5)
+        # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
+        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        mlp_hidden_dim = int(dim * mlp_ratio)
+        self.mlp1 = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=0.0)
+
+        self.mlp2 = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=0.0)
+        self.norm3 = norm_layer(dim)
+        self.norm4 = norm_layer(dim)
+
+    def forward(self, x):
+        x_img = x[:,:self.img_chanel, :]
+        x_lm = x[:,self.img_chanel:, :]
+        x_img = x_img + self.drop_path(self.attn_img(self.norm1(x)))
+        x_img = x_img + self.drop_path(self.mlp1(self.norm2(x_img)))
+
+        x_lm = x_lm + self.drop_path(self.attn_lm(self.norm3(x)))
+        x_lm = x_lm + self.drop_path(self.mlp2(self.norm4(x_lm)))
+        x = torch.cat((x_img, x_lm), dim=1)
+        return x
+
+class PyramidBlock(nn.Module):
+
+    def __init__(self, dim, in_chans, q_chanel, num_heads, mlp_ratio=4., qkv_bias=False, drop=0., attn_drop=0.,
+                 drop_path=0., act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+        super().__init__()
+        self.block_l = FastAttentionBlock(
+                dim ,mlp_ratio =mlp_ratio ,drop = 0.0, drop_path = 0.0,use_layer_scale=True,layer_scale_init_value=1e-5)
+
+        # self.block_m = FastAttentionBlock(
+        #     dim//2 ,mlp_ratio =mlp_ratio ,drop = 0.0, drop_path = 0.0,use_layer_scale=True,layer_scale_init_value=1e-5)
+
+        # self.block_s = FastAttentionBlock(
+        #     dim//4 ,mlp_ratio =mlp_ratio ,drop = 0.0, drop_path = 0.0,use_layer_scale=True,layer_scale_init_value=1e-5)
+
+        n_channels = (in_chans+1) + (q_chanel+1)
+
+        self.upsample_m = nn.ConvTranspose1d(n_channels, n_channels, kernel_size=2, stride=2)
+        self.upsample_s = nn.ConvTranspose1d(n_channels, n_channels, kernel_size=2, stride=2)
+
+
+    def forward(self, x):
+        x_l = x[0]
+        # x_m = x[1]
+        # x_s = x[2]
+        x_l = self.block_l(x_l)
+        # x_m = self.block_m(x_m)
+        # x_s = self.block_s(x_s)
+
+        # x_m = self.upsample_s(x_s) + x_m
+        #x_l = x_l + self.upsample_m(x_m)
+        x = [x_l]#, x_m, x_s]
+        return x
+
+
+class HyVisionTransformer(nn.Module):
+    """ Vision Transformer
+    A PyTorch impl of : `An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale`
+        - https://arxiv.org/abs/2010.11929
+    Includes distillation token & head support for `DeiT: Data-efficient Image Transformers`
+        - https://arxiv.org/abs/2012.12877
+    """
+
+    def __init__(self, in_chans=49, q_chanel = 49, num_classes=1000, embed_dim=512, depth=12,
+                 num_heads=8, mlp_ratio=4., qkv_bias=True, distilled=False,
+                 drop_rate=0., attn_drop_rate=0., drop_path_rate=0.,  norm_layer=None,
+                 act_layer=None, weight_init=''):
+
+        super().__init__()
+        self.num_classes = num_classes
+        self.in_chans = in_chans
+        self.num_features = self.embed_dim = embed_dim  # num_features for consistency with other models
+        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        act_layer = act_layer or nn.GELU
+
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, in_chans + 1, embed_dim))
+        self.pos_drop = nn.Dropout(p=drop_rate)
+
+        n_channels = (in_chans+1) + (q_chanel+1)
+        self.downsample_m = nn.Conv1d(n_channels, n_channels, kernel_size=2, stride=2)
+        self.downsample_s = nn.Conv1d(n_channels, n_channels, kernel_size=4, stride=4)
+
+        dpr = [x.detach() for x in torch.linspace(0, drop_path_rate, depth)]  # stochastic depth decay rule
+        self.blocks = nn.Sequential(*[
+            PyramidBlock(
+                dim=embed_dim, in_chans=in_chans, q_chanel=q_chanel, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias,
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=dpr[i], norm_layer=norm_layer, act_layer=act_layer)
+            for i in range(depth)])
+        self.norm = norm_layer(embed_dim*2)
+
+        # self.final = nn.Linear(embed_dim*2, embed_dim)
+        # Classifier head(s)
+        # self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+
+
+    def forward(self, x, x_lm):
+        B = x.shape[0]
+        #x_cls = torch.mean(x, 1).view(B,1,-1)
+        # cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+       # x = torch.cat((x_cls, x), dim=1)
+       # x = self.pos_drop(x + self.pos_embed)
+
+      #  xlm_cls = torch.mean(x_lm, 1).view(B,1,-1)
+        #x_lm = torch.cat((xlm_cls, x_lm), dim=1)
+
+        new_x = torch.cat((x, x_lm), dim=1)
+
+        ###############################
+        new_x_l = new_x
+        # new_x_m = self.downsample_m(new_x)
+        # new_x_s = self.downsample_s(new_x)
+        new_x_in = [new_x_l]#,new_x_m,new_x_s]
+        #############################
+        new_x_in = self.blocks(new_x_in)
+        new_x_l = new_x_in[0]
+        new_x_l = new_x_l.permute(0,2,1)
+        new_x_l = self.norm(new_x_l)
+        x_class1 = new_x_l[:,0,:]
+        #x_class2 = new_x_l[:, self.in_chans+1, :]
+
+        return x_class1

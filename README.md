@@ -123,7 +123,7 @@ This repository builds on the following publicly available methods/tools (used i
 >
 > 
 ## Contact
-For double-blind review, please use the anonymous contact channel specified in the submission system.
+azmoudeh22@itu.edu.tr
 
-## NOTE: The repository will be transferred  to the official account if the paper is accepted.
+
 

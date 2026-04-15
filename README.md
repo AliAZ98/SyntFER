@@ -1,4 +1,4 @@
-# SyntFER72
+# SyntFER
 
 ![Abstract overview / teaser](Figures/overall%20data%20generation.png)
 

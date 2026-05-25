@@ -77,14 +77,14 @@ For the three external sources above (DCFace, DigiFace-1M, EmoNet-Face BIG), use
 | DCFace | Official source (see above) | N/A |
 | DigiFace-1M | Official source (see above) | N/A |
 | EmoNet-Face BIG | Official source (see above) | N/A |
-| StableDiffusion-Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| FineFace-Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| FineFaceV2-Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| GANmut-F (Fixed-intensity) Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| GANmut-V (Variate-intensity) Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| Mixed-SYN Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| Mixed-SYN-C Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
-| Mixed-SYN* Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| StableDiffusion-Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| FineFace-Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| FineFaceV2-Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| GANmut-F (Fixed-intensity) Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| GANmut-V (Variate-intensity) Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| Mixed-SYN Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| Mixed-SYN-C Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
+| Mixed-SYN* Curated | This repository | [Download](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j) |
 
 > **Note:** “Curated” refers to the processed/balanced subsets prepared for FER training under the protocols described in the paper.
 

@@ -66,26 +66,24 @@ Download the original datasets from their official sources:
 ---
 
 ### b) Curated datasets (this work)
-The curated datasets listed below will be uploaded soon.  
-For the three external sources above (DCFace, DigiFace-1M, EmoNet-Face BIG), the “curated download” is not provided here (N/A), since they should be downloaded from their official sources.
+The curated datasets listed below are provided under the protocols described in the paper.  
+For the three external sources above (DCFace, DigiFace-1M, EmoNet-Face BIG), users should download the original datasets from their official sources.
 
 | Curated dataset name | Source repo / HF / panel | Link to download curated dataset |
 |---|---|---|
 | DCFace | Official source (see above) | N/A |
 | DigiFace-1M | Official source (see above) | N/A |
 | EmoNet-Face BIG | Official source (see above) | N/A |
-| StableDiffusion-Curated | This repository | **Will be uploaded soon** |
-| FineFace-Curated | This repository | **Will be uploaded soon** |
-| FineFaceV2-Curated | This repository | **Will be uploaded soon** |
-| GANmut-F (Fixed-intensity) Curated | This repository | **Will be uploaded soon** |
-| GANmut-V (Variate-intensity) Curated | This repository | **Will be uploaded soon** |
-| Mixed-SYN Curated | This repository | **Will be uploaded soon** |
-| Mixed-SYN-C Curated | This repository | **Will be uploaded soon** |
-| Mixed-SYN* Curated | This repository | **Will be uploaded soon** |
+| StableDiffusion-Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| FineFace-Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| FineFaceV2-Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| GANmut-F (Fixed-intensity) Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| GANmut-V (Variate-intensity) Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| Mixed-SYN Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| Mixed-SYN-C Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
+| Mixed-SYN* Curated | This repository | [Download](https://drive.google.com/file/d/10e48KbnxjOndiamiZvCcstVcvkEJ9l16/view?usp=drivesdk) |
 
 > **Note:** “Curated” refers to the processed/balanced subsets prepared for FER training under the protocols described in the paper.
-
----
 
 ## Repository map (quick glance)
 - `Figures/` — paper figures used in this README

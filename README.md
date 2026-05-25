@@ -137,6 +137,8 @@ If you use the curated datasets, generated samples, or any part of this reposito
       primaryClass={cs.CV},
       url={https://arxiv.org/abs/2605.17483}, 
 }
+```
+
 > 
 ## Contact
 azmoudeh22@itu.edu.tr

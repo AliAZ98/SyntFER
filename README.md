@@ -122,6 +122,21 @@ This repository builds on the following publicly available methods/tools (used i
 
 > Please follow each project’s license and citation requirements when using these external tools/models.
 >
+## Citation and Usage
+
+If you use the curated datasets, generated samples, or any part of this repository in your research or projects, please cite our work:
+
+```bibtex
+
+@misc{azmoudeh2026applicabilitysyntheticdatasetsfacial,
+      title={On Applicability of Synthetic Datasets for Facial Expression Recognition}, 
+      author={Ali Azmoudeh and Erdi Sarıtaş and Ömer Yıldırım and Hazım Kemal Ekenel},
+      year={2026},
+      eprint={2605.17483},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV},
+      url={https://arxiv.org/abs/2605.17483}, 
+}
 > 
 ## Contact
 azmoudeh22@itu.edu.tr

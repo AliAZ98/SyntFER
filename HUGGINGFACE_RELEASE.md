@@ -7,7 +7,7 @@ This repository is prepared to publish the curated SyntFER datasets on the Huggi
 Use one dataset repository:
 
 ```text
-<HF_USERNAME>/SyntFER-Curated
+AliAz98/SyntFER-Curated
 ```
 
 with one Hugging Face configuration (subset) per curated dataset:
@@ -29,10 +29,32 @@ Example:
 from datasets import load_dataset
 
 dataset = load_dataset(
-    "<HF_USERNAME>/SyntFER-Curated",
+    "AliAz98/SyntFER-Curated",
     "StableDiffusion-Curated",
 )
 ```
+
+## Source files and verification status
+
+The intended Hub destination is `AliAz98/SyntFER-Curated`. This document does not imply that the Hub repository has been created or populated.
+
+The project README currently links all eight curated variants to this shared source folder:
+
+[Download source datasets from Google Drive](https://drive.google.com/drive/folders/1L1HW3rY7l398RMKeZp4e9eV-uZqvoS_j)
+
+Individual archive download links have not yet been verified. Do not treat the shared folder URL as a direct archive download.
+
+Ali Azmoudeh confirms that these datasets were curated by him and his colleague and that all released images are synthetic. The source models and any source-image editing steps should still be described for each variant.
+
+As of 2026-09-29, the repository links and release helper have been inspected, but the Drive files have not been accessed. Therefore the following remain **unverified**:
+
+- actual archive names and their mapping to the eight configurations;
+- folder structure and split names;
+- image counts for each expression class and split;
+- image readability and duplicate files;
+- correspondence between the downloadable files and the paper's released variants.
+
+The layouts below are expected layouts, not observations from the downloaded data. Compute the counts from the actual files before including them in a dataset card.
 
 ## Expected local folder structure
 
@@ -69,7 +91,7 @@ FineFace-Curated/
 
 ## Upload
 
-1. Create a Hugging Face account.
+1. Use the Hugging Face account `AliAz98`.
 2. Create a write token in Hugging Face settings.
 3. Install the required packages:
 
@@ -88,7 +110,7 @@ hf auth login
 ```bash
 python tools/upload_syntfer_to_hf.py \
   --dataset-root "/path/to/StableDiffusion-Curated" \
-  --repo-id "<HF_USERNAME>/SyntFER-Curated" \
+  --repo-id "AliAz98/SyntFER-Curated" \
   --config-name "StableDiffusion-Curated"
 ```
 
